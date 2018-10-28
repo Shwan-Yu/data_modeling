@@ -1,0 +1,167 @@
+---
+title: "Homework4"
+author: "Xuan Yu"
+date: "10/05/2018"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+## Maternal Smoking and Premature Birth
+Read in the data.
+```{r read in}
+library("pROC")
+library("arm")
+maternal_data <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW4/smoking.csv")
+maternal_data$premature <- rep(0, nrow(maternal_data))
+maternal_data$premature[maternal_data$gestation < 270] <- 1
+
+maternal_data$mrace_new <- maternal_data$mrace
+maternal_data$mrace_new[maternal_data$mrace >= 0 & maternal_data$mrace <= 5] <- 5
+
+maternal_data$who_smoke <- maternal_data$smoke
+maternal_data$who_smoke[maternal_data$smoke != 0] <- 1
+
+dim(maternal_data)
+summary(maternal_data)
+```
+
+Some exploratory data analysis: 
+
+There are very few observation in education level 7 so we don't worried about its different mean value with other level
+
+We may care more about smoke variable and race variable:
+```{r plot}
+boxplot(parity~premature, data = maternal_data, xlab = "premature", ylab = "parity")
+boxplot(mage~premature, data = maternal_data, xlab = "premature", ylab = "mother's age")
+boxplot(mht~premature, data = maternal_data, xlab = "premature", ylab = "mother's height")
+boxplot(mpregwt~premature, data = maternal_data, xlab = "premature", ylab = "mother's weight")
+boxplot(inc~premature, data = maternal_data, xlab = "premature", ylab = "income")
+
+tapply(maternal_data$premature, maternal_data$who_smoke, mean)
+tapply(maternal_data$premature, maternal_data$mrace_new, mean)
+tapply(maternal_data$premature, maternal_data$med, mean)
+```
+
+Now we are looking at binnedplots of continuous predictors versus premature birth:
+We'll ignore the SD lines in these plots -- they are only relevant when plotting binned residuals
+versus the predicted probabilities:
+
+```{r binnedplots with variable}
+binnedplot(maternal_data$parity, y=maternal_data$premature, xlab = "parity", ylab = "premature")
+binnedplot(maternal_data$mage, y=maternal_data$premature, xlab = "mother's age", ylab = "premature")
+binnedplot(maternal_data$mht, y=maternal_data$premature, xlab = "mother's height", ylab = "premature")
+binnedplot(maternal_data$mpregwt, y=maternal_data$premature, xlab = "mother's weight", ylab = "premature")
+binnedplot(maternal_data$inc, y=maternal_data$premature, xlab = "income", ylab = "premature")
+```
+
+Then try a logistic regression that has a main effect for every variable and linear
+predictors. Begin by centering the continuous predictors:
+```{r mean centering and modeling}
+maternal_data$parity.c <- maternal_data$parity - mean(maternal_data$parity)
+maternal_data$mage.c <- maternal_data$mage - mean(maternal_data$mage)
+maternal_data$mht.c <- maternal_data$mht - mean(maternal_data$mht)
+maternal_data$mpregwt.c <- maternal_data$mpregwt - mean(maternal_data$mpregwt)
+maternal_data$inc.c <- maternal_data$inc - mean(maternal_data$inc)
+
+logis_mat_1 <- glm(premature~parity.c + mage.c + mht.c + mpregwt.c + inc.c + who_smoke + as.factor(mrace_new) + as.factor(med), data = maternal_data, family = binomial)
+summary(logis_mat_1)
+```
+
+###model diagnostics
+We first do binned residual plots for numeric variables:
+We don't find any noticeable patterns.
+```{r raw residuals}
+rawresid1 = maternal_data$premature - fitted(logis_mat_1)
+binnedplot(x=maternal_data$parity.c, y = rawresid1, xlab = "Parity centered", ylab = "Residuals",
+main = "Binned residuals versus parity")
+
+binnedplot(x=maternal_data$mage.c, y = rawresid1, xlab = "Age centered", ylab = "Residuals",
+main = "Binned residuals versus age")
+
+binnedplot(x=maternal_data$mht.c, y = rawresid1, xlab = "Height centered", ylab = "Residuals",
+main = "Binned residuals versus height")
+
+binnedplot(x=maternal_data$mpregwt.c, y = rawresid1, xlab = "Weight centered", ylab = "Residuals",
+main = "Binned residuals versus weight")
+
+binnedplot(x=maternal_data$inc.c, y = rawresid1, xlab = "Income centered", ylab = "Residuals",
+main = "Binned residuals versus income")
+```
+Then look at average residuals by dummy variables using the tapply command:
+Nothing specific, except med level 7, which has few data, so we ignore that.
+```{r average residuals}
+tapply(rawresid1, maternal_data$who_smoke, mean)
+tapply(rawresid1, maternal_data$mrace_new, mean)
+tapply(rawresid1, maternal_data$med, mean)
+```
+
+Then do the confusion matrix with .3 threshold and .4 threshold, nothing specific:
+```{r confusion matrix}
+threshold = 0.3
+table(maternal_data$premature, logis_mat_1$fitted > threshold)
+
+threshold = 0.4
+table(maternal_data$premature, logis_mat_1$fitted > threshold)
+```
+
+Then look at ROC curve:
+We didn't find specific pattern from the model diagnostics, so we decide not to do transformations. We got area under the curve value: 0.6621.
+```{r ROC}
+roc(maternal_data$premature, fitted(logis_mat_1), plot=T, legacy.axes=T)
+```
+Then we look at if there are interactions between variables:
+For question 2, we need to first check if there is interaction between smoking and mother's race.
+We try the model with the interaction:
+```{r interact smoking and race}
+logis_mat_2 <- glm(premature~parity.c + mage.c + mht.c + mpregwt.c + inc.c + who_smoke * as.factor(mrace_new) + as.factor(med), data = maternal_data, family = binomial)
+summary(logis_mat_2)
+```
+We do change in deviance test to see if the interaction is useful. We get a p value of 0.2408, so we don't find interaction between smoking and race variable.
+```{r change in deviance test}
+anova(logis_mat_1, logis_mat_2, test= "Chisq")
+```
+
+Scientifically, it is plausible to think that there might be interactions among weight variable and education, because mother with higher education level might focus more on their baby and willing to spend more part of their income to reduce pre-term birth, so I might try the interaction between income and education:
+```{r interact smoking and height, warning=FALSE}
+logis_mat_3 <- glm(premature~parity.c + mage.c + mht.c + mpregwt.c + inc.c * as.factor(med) + who_smoke + as.factor(mrace_new), data = maternal_data, family = binomial)
+summary(logis_mat_3)
+```
+We do change in deviance test to see if the interaction is useful. We get a p value of 0.048, so we might find interaction between income and education.
+```{r change in deviance test, interesting}
+anova(logis_mat_1, logis_mat_3, test= "Chisq")
+```
+We then check the ROC curve:
+We got a lightly better area under the curve value: 0.6729.
+```{r ROC, final}
+roc(maternal_data$premature, fitted(logis_mat_3), plot=T, legacy.axes=T)
+```
+Because the interaction we found is scientifically reasonable, and we got a way better ROC curve with that model, we decide to choose model_3 as our final model.
+Here is the model:
+```{r final model, warning=FALSE}
+logis_mat_3 <- glm(premature~parity.c + mage.c + mht.c + mpregwt.c + inc.c * as.factor(med) + who_smoke + as.factor(mrace_new), data = maternal_data, family = binomial)
+summary(logis_mat_3)
+```
+And we take exponential for the coefficients and confidence intervals to get the odds:
+```{r exp, message=FALSE, warning=FALSE}
+exp(logis_mat_3$coefficients)
+exp(confint(logis_mat_3))
+```
+###Interpretation:
+
+Answer for question 1:
+
+Holding other variables constant, mothers who smoke tend to have 32.79% higher odds of having pre-term birth than mothers who do not smoke. The 95% confidence interval for the odds of pre-term birth for smokering mothers are from 7.93% lower to 91.83% higher (92.07%, 191.83%) than non-smoking mothers.
+
+Answer for question 2:
+
+We did change in deviance test to see if the interaction between smoking and race is valid. We got a p value of 0.2408 > 0.05, so we don't find interaction between smoking and race variable.
+
+Answer for question 3:
+
+I found several interesting associations with the odds of pre-term birth:
+
+1, We found it interesting that holding other variables constant, when pre-pregnancy weight increase by 1 pound, the odds of getting a pre-term birth in fact reduce by 1.23%, with a confidence interval of (0.17%, 2.34%) reducing odds of having pre-term birth.
+
+2, We found another thing that holding other variables constant, mothers of race level 7 and 8, which is black and asian, in fact have way much higher odds of pre-term birth than white mothers. Black mothers tend to have 111.93% higher odds (more than 2 times of the odds) of having a pre-term birth than white mothers; asian mothers tend to have 122.99% higher odds (more than 2 times of the odds) of having a pre-term birth than white mothers.

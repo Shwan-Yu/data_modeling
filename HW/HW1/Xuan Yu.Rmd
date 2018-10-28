@@ -1,0 +1,159 @@
+---
+title: "Xuan Yu - HW1"
+author: "Xuan Yu"
+date: "9/3/2018"
+output: pdf_document
+---
+
+
+## Problem 1
+
+###This is the summary for the model:
+```{r linear model, old}
+oldfaithful <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW1/OldFaithful.csv")
+lm_old <- lm(Interval~Duration, data = oldfaithful)
+summary(lm_old)
+```
+
+###This is the 95% confidence interval for the model:
+```{r 95% confidence interval, old}
+confint(lm_old)
+```
+
+###Check the assumption:
+We are using the first three plots of the first commond and then the second commond to check the assumption.
+```{r residual plot, old}
+par(mfcol = c(3,2))
+plot(lm_old)
+plot(1:dim(oldfaithful)[1], lm_old$residuals) #for the independence assumption
+```
+
+###Description:
+All the assumptions are met.
+
+###Prediction
+Here is the 95% prediction interval when the duration of the previous one is 4 minutes:
+```{r 95% prediction interval at 4, old}
+newdata.old <- data.frame(Duration = 4)
+predict.lm(lm_old, newdata.old, interval = "prediction")
+```
+
+###Conclusion:
+When the duration of the previous eruption increases by 1 minute, the interval time until the next eruption will increase 10.741 minutes. The following plot shows this relationship.
+```{r conclusion, old}
+plot(oldfaithful$Duration, oldfaithful$Interval)
+abline(33.8282, 10.7410)
+```
+
+## Problem 2
+
+###Load in the data and check the assumptions.
+```{r linear model, resp}
+respiratory <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW1/Respiratory.csv")
+```
+
+We found that the linearity and normality assumption are not met.
+
+###Do the transformation and then the linear regression:
+```{r linear regression, resp}
+respiratory$LogRate <- log(respiratory$Rate)
+lm_resp_trans <- lm(LogRate~Age, data = respiratory)
+summary(lm_resp_trans)
+```
+
+###Check the assumptions again:
+```{r assumption after trans, resp}
+par(mfcol = c(3,2))
+plot(lm_resp_trans)
+plot(1:dim(respiratory)[1], lm_resp_trans$residuals) #for the independence assumption
+```
+
+###Description:
+All the assumptions are met.
+
+###This is the 95% confidence interval for the model:
+```{r 95% confidence interval, resp}
+confint_log <- confint(lm_resp_trans)
+exp(confint_log)
+```
+
+###Prediction
+Here is the 95% prediction rate for three individual children: a 1 month old, an 18 months old, and a 29 months old:
+```{r 95% individual prediction interval at 1, 18, 29, resp}
+newdata.resp <- data.frame(Age = c(1, 18, 29))
+predict_confint_resp <- predict.lm(lm_resp_trans, newdata.resp, interval = "prediction")
+predict_confint_resp <- exp(predict_confint_resp)
+cbind(newdata.resp, predict_confint_resp)
+```
+
+###Conclusion:
+exp(-0.0190090) = 98.117%.
+
+According to the fomula, when the age of the baby increases by 1 month, the respiratory rate will become 98.117% of itself. 
+
+In other word, when the age of the baby increases by 1 month, the respiratory rate will decrease by 1.883%.
+
+The following plot shows this relationship between the respiratory rate and the age:
+```{r plot, resp}
+respiratory$log_resp <- (-0.0190090 * respiratory$Age) + 3.8451185
+plot(respiratory$Age, exp(respiratory$log_resp), type = 'l')
+points(respiratory$Age, respiratory$Rate)
+```
+
+## Problem 3
+
+###Load in the data and plot it, we see an outlier, we run the model with the outlier, and linearity assumption is not met:
+```{r remove PB, ele}
+elections <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW1/Elections.csv")
+plot(elections$Bush2000, elections$Buchanan2000)
+lm_ele <- lm(Bush2000~Buchanan2000, data = elections)
+plot(lm_ele)
+```
+
+So we decied to remove the outlier to do the prediction:
+
+After checking the linear regression assumptions, we found that the linearity and normality assumption are not met.
+
+###Transformation:
+Because the linear regression doesn't met the assumptions, we need to do transformation for it. 
+
+###Here is the transformation and the linear regression for it:
+```{r trans, ele}
+ele_without_PB <- elections[elections$County != "Palm Beach",]
+ele_without_PB$LogY <- log(ele_without_PB$Buchanan2000)
+ele_without_PB$LogX <- log(ele_without_PB$Bush2000)
+lm_ele_trans <- lm(LogY~LogX, data = ele_without_PB)
+```
+
+###Check the assumption again:
+```{r check the assumptions after trans, ele}
+par(mfcol = c(3,2))
+plot(lm_ele_trans)
+plot(1:dim(ele_without_PB)[1], lm_ele_trans$residuals) #for the independence assumption
+```
+
+###Description:
+All assumtions are met.
+
+###This is the summary and confidence interval for the transformed model:
+```{r summary and confint, ele}
+summary(lm_ele_trans)
+confint_log <- confint(lm_ele_trans)
+exp(confint_log)
+```
+
+###The prediction for Buchanan's votes in Palm Beach County:
+```{r prediction, ele}
+newdata.ele <- data.frame(LogX = log(152846))
+predict_confint_ele <- predict.lm(lm_ele_trans, newdata.ele, interval = "prediction")
+predict_confint_ele <- exp(predict_confint_ele)
+predict_confint_ele
+```
+
+###Votes intended for Gore:
+```{r votes for Gore}
+c(3407 - predict_confint_ele[3], 3407 - predict_confint_ele[2])
+```
+
+###Conclusion:
+So Buchanan's votes in Palm Beach county should be in the range of (250.8001, 1399.164), but he got 3407 votes. So there were (2007.836, 3156.200) votes which are intended for Gore.

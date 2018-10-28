@@ -1,0 +1,92 @@
+---
+title: "Homework3"
+author: "Xuan Yu"
+date: "9/24/2018"
+output: pdf_document
+---
+
+## Maternal Smoking and Birth Weights
+Read in the data.
+```{r read in}
+maternal_data <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW3/smoking.csv")
+maternal_data$mrace_new <- maternal_data$mrace
+maternal_data$mrace_new[maternal_data$mrace >= 0 & maternal_data$mrace <= 5] <- 5
+
+maternal_data$who_smoke <- maternal_data$smoke
+maternal_data$who_smoke[maternal_data$smoke != 0] <- 1
+
+```
+Plot all the continuous variable and categorical variable:
+```{r plot}
+plot(maternal_data$parity, maternal_data$bwt.oz)
+plot(maternal_data$mage, maternal_data$bwt.oz)
+plot(maternal_data$mht, maternal_data$bwt.oz)
+plot(maternal_data$mpregwt, maternal_data$bwt.oz)
+plot(maternal_data$inc, maternal_data$bwt.oz)
+
+boxplot(bwt.oz~who_smoke, data = maternal_data)
+boxplot(bwt.oz~as.factor(mrace_new), data = maternal_data)
+boxplot(bwt.oz~as.factor(med), data = maternal_data)
+```
+See if there are correlations between predictor variables, there's no very huge correlations:
+```{r correlations}
+round(cor(maternal_data[,4:14]), 3)
+```
+
+Maternal height and weight variable have quadratic trends, so take a quadratic transformation for maternal height and weight, then do the modeling:
+```{r transformation and modeling}
+maternal_data$mht2 <- maternal_data$mht ^ 2
+maternal_data$mpregwt2 <- maternal_data$mpregwt ^ 2
+
+maternal_lm <- lm(bwt.oz ~ date + who_smoke + parity + mage + 
+                  mht + mht2 + mpregwt + mpregwt2 + inc + 
+                  as.factor(mrace_new) + as.factor(med), 
+                  data = maternal_data)
+summary(maternal_lm)
+```
+We checked the assumptions and all the assumptions are met.
+
+For question 2, We do the regression with interaction of race variable and do the nested F test. The result p value is 0.3079, so we don't find interaction of race variable significant:
+```{r regression with interaction of race}
+maternal_lm_race_interaction <- lm(bwt.oz ~ date + who_smoke * as.factor(mrace_new) + 
+                                   parity + mage + mht + mht2 + mpregwt + mpregwt2 + 
+                                   inc + as.factor(mrace_new) + as.factor(med), 
+                                   data = maternal_data)
+anova(maternal_lm, maternal_lm_race_interaction)
+```
+
+We also need to check if there are other interactions, and found parity and age, as well as education and income might have interaction between each other:
+```{r check interactions}
+library("lattice")
+xyplot(bwt.oz~parity|as.factor(mage), data = maternal_data, xlab = "parity | age")
+bwplot(bwt.oz~inc|as.factor(med), data = maternal_data, xlab = "income | education")
+```
+
+We add these two interections to our final model:
+```{r regression with interactions}
+maternal_lm_med_interaction <- lm(bwt.oz ~ date + who_smoke + parity * mage + mage + 
+                                  mht + mht2 + mpregwt + mpregwt2 + inc + 
+                                  as.factor(mrace_new) + as.factor(med) * inc, 
+                                  data = maternal_data)
+summary(maternal_lm_med_interaction)
+```
+Here is the 95% confindent interval:
+```{r confint}
+confint(maternal_lm_med_interaction)
+```
+
+Interpretation:
+
+Answer for question 1:
+
+Holding other variable constant, mothers who smoke tend to give birth to babies with 9.219 ounces lower weights than mothers who do not smoke. The 95% confidence interval for the difference in birth weights for smokers and non-smokers is (-11.5328, -6.9050) when considering non-smoker variable the base case.
+
+Answer for question 2:
+
+We did the nested F test for model with and without interaction of race, and found the result p value is 0.3079 > 0.05, so we don't find the interaction of race variable important to smoking variable.
+
+Answer for question 3:
+
+1, We found it interesting that age seems to have interaction with parity, which makes sense: older mother tend to have larger number of pregnancies.
+
+2, We found another interesting association between income and education level, that is, the association between income and birth weight differs by education level.

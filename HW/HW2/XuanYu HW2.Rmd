@@ -1,0 +1,221 @@
+---
+title: "Homework2 -- Multiple Regression"
+author: "Xuan Yu"
+date: "9/17/2018"
+output: pdf_document
+---
+## 1. Brain Weights
+### Part A:
+```{r read in and transformation}
+brain_data <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW2/Ex0912.csv")
+brain_data$brainLog <- log(brain_data$Brain)
+brain_data$bodyLog <- log(brain_data$Body)
+brain_data$gestationLog <- log(brain_data$Gestation)
+brain_data$litterLog <- log(brain_data$Litter)
+```
+Here's the matrix of data:
+```{r matrix of plot q1}
+pairs(brain_data[,7:10])
+```
+
+### Part B:
+Here is the summary of the linear model and the confidence interval:
+```{r multiple regression}
+lm_brain <- lm(brainLog ~ bodyLog + gestationLog + litterLog, data = brain_data)
+summary(lm_brain)
+confint(lm_brain)
+```
+
+### Part C:
+The relationship between the log brain weight and litter size appear to be stronger than the relationship between log brain weight and log litter size.
+
+## 2. Brain Weights Additional
+### Part D:
+Here is the summary of the linear model and the confidence interval when litter size is on its naturual scale:
+```{r lm brain additional}
+lm_brain_additional <- lm(brainLog ~ bodyLog + gestationLog + Litter, data = brain_data)
+summary(lm_brain_additional)
+confint(lm_brain_additional)
+```
+
+### Part E:
+Interpretaion:
+
+1.Holding all other variables constant, A 10% increase in body weight will multiply brain weight by 1.7763243 ^ log(1.10) ??? 1.056287, i.e. we expect the brain weight to increase by about 5.6287%. Its 95% confidence interval is (1.6648155, 1.895302).
+
+2.Holding all other variables constant, A 10% increase in gestation will multiply brain weight by 1.5521527 ^ log(1.10) ??? 1.042793, i.e. we expect the brain weight to increase by about 4.2793%. Its 95% confidence interval is (1.1824465, 2.037452).
+
+3.Holding all other variables constant, each one unit increase of litter size multiplies brain weight by 0.8954963, i.e. we expect the brain weight to decrease by about 10.45%. Its 95% confidence interval is (-0.19432204, -0.02643223).
+```{r natural scale brain}
+exp(lm_brain_additional$coefficients)
+exp(confint(lm_brain_additional)[1:3,])
+confint(lm_brain_additional)[4,] #confidence interval for the litter.
+```
+
+### Part F:
+I prefer the one in Part B. First, it's residual plots have better qualities. Second, it's easier to interpret with all variable being transformed, so interpretation of all variable are in the same format. 
+
+By the way, their R square are both large enough and are very close, so both models are fine for the R square.
+
+## 3. Kentucky Derby
+```{r read in and pairs, Kentucky}
+kentucky_data <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW2/Ex0920.csv")
+pairs(cbind(kentucky_data[5], kentucky_data[4], kentucky_data[2]))
+```
+Some correlations were found among all variables.
+
+Then do the multiple regression, we set the slowCond as the base case:
+```{r multiple regression, kentucky}
+n <- nrow(kentucky_data)
+kentucky_data$slowCond <- rep(0, n)
+kentucky_data$slowCond[kentucky_data$Condition == "slow"] = 1
+
+kentucky_data$goodCond <- rep(0, n)
+kentucky_data$goodCond[kentucky_data$Condition == "good"] = 1
+
+kentucky_data$fastCond <- rep(0, n)
+kentucky_data$fastCond[kentucky_data$Condition == "fast"] = 1
+
+lm_kentucky <- lm(Speed ~ goodCond + fastCond + Year, data = kentucky_data)
+```
+
+We need to check the assumption, and found a quadratic trend in the residual~year scatter plot, so the model is not well-fitted. We need to consider transformations to improve the model:
+```{r check the assumption, kentucky}
+plot(y = lm_kentucky$residual, x = kentucky_data$Year, xlab = "Year", ylab = "Residual")
+abline(0,0)
+```
+
+Then mean-center and transform the continuous predictor to improve interpretation of outputs:
+```{r mean center, kentucky}
+kentucky_data$yearc <- kentucky_data$Year - mean(kentucky_data$Year)
+kentucky_data$yearc2 <- kentucky_data$yearc ^ 2
+```
+
+Do the regression again:
+```{r regression again, kentucky}
+lm_quadra_kentucky <- lm(Speed ~ goodCond + fastCond + yearc2 + yearc, data = kentucky_data)
+```
+This time, residual plots are randomly scattered, so this is the model we decied to use.
+Here is the relevant regression output:
+```{r regression output, kentucky}
+summary(lm_quadra_kentucky)
+confint(lm_quadra_kentucky)
+```
+Interpretation:
+
+1.Holding all other variables constant, the winning time in good track condition is 0.6542 feet per second faster than that in the slow condition, and the winning time with fast track condition is 1.3244 feet per second faster than that in the slow condition.
+
+2.We use plot to interpret the Year variable.
+
+Holding all other variables constant, the plot below describes the relation between winning speed and year in slow track condition:
+```{r year interpretation, kentucky}
+year_changes <- kentucky_data$yearc
+coef(lm_quadra_kentucky)
+winningSpeed <- coef(lm_quadra_kentucky)[4] * year_changes ^ 2 + coef(lm_quadra_kentucky)[5] * year_changes + coef(lm_quadra_kentucky)[1]
+plot(x = year_changes, y = winningSpeed, xlab = "Change in mean centered Years", ylab = "Change in winning Speed")
+```
+
+
+## 4. Old Faithful
+```{r read in and pairs, old}
+OF_data <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW2/Ex1015.csv")
+pairs(OF_data[,2:4])
+```
+Then do the multiple regression and the anova with Date:
+```{r multiple regression,old}
+lm_old <- lm(Interval ~ as.factor(Date) + Duration, data = OF_data)
+summary(lm_old)
+anova(lm_old)
+```
+
+We checked the assumption plots and found them to be randomly scattered, so this model is well-fitted.
+
+Now we need to remove the Date variable to do the nested F test to determin whether Date variable is important:
+```{r multiple regression without Date, old}
+lm_noDate_old <- lm(Interval ~ Duration, data = OF_data)
+anova(lm_old, lm_noDate_old)
+```
+
+Conclusion:
+The F statistic is 0.2086 and the p value is 0.9828. The p value is much bigger than 0.05, which indicate that we didn't find obvious relationship between the interval variable and the date variable.
+
+## 5. Wages and Race
+```{r read in, WR}
+WR_data_raw <- read.csv("/Users/xuanyu/Desktop/MIDS courses/data modeling/HW/HW2/Ex1029.csv")
+```
+And we found negetive data in the Experience variable, which doesn't make sense, so we treat them as error and delete them:
+```{r delete error, WR}
+summary(WR_data_raw)
+WR_data <- WR_data_raw[WR_data_raw$Experience >= 0,]
+```
+
+
+Plot the variables and we found quadratic trends in Experience variable and fan out trend in Education variables.
+```{r plot the relationship, WR}
+par(mfcol = c(1,2))
+plot(WR_data$Experience, WR_data$Wage)
+plot(WR_data$Education, WR_data$Wage)
+```
+
+Do the log transformation for Wage and quadratic transformation for Experience, then do the multiple regression, we set NEregion as the base case:
+```{r multiple regression, WR}
+n <- nrow(WR_data)
+WR_data$isBlack <- rep(0, n)
+WR_data$isBlack[WR_data$Black == "Yes"] = 1
+WR_data$isSMSA <- rep(0, n)
+WR_data$isSMSA[WR_data$SMSA == "Yes"] = 1
+
+WR_data$NEregion <- rep(0, n)
+WR_data$NEregion[WR_data$Region == "NE"] = 1
+
+WR_data$MWregion <- rep(0, n)
+WR_data$MWregion[WR_data$Region == "MW"] = 1
+
+WR_data$Sregion <- rep(0, n)
+WR_data$Sregion[WR_data$Region == "S"] = 1
+
+WR_data$Wregion <- rep(0, n)
+WR_data$Wregion[WR_data$Region == "W"] = 1
+
+WR_data$Education2 <- WR_data$Education ^ 2
+WR_data$Experience2 <- WR_data$Experience ^ 2
+WR_data$WageLog <- log(WR_data$Wage)
+
+lm_Log_WR <- lm(WageLog ~ Education + Experience2 + Experience + isBlack + isSMSA + MWregion + Sregion + Wregion, data = WR_data)
+```
+
+We checked the assumption plots and found them to be randomly scattered, and the R square is big enough, so this model is well-fitted.
+
+Now we need to remove the Region variable to do the nested F test to determin whether Region variable is important:
+```{r multiple regression without Region, WR}
+lm_Log_noRegion_WR <- lm(WageLog ~ Education + Experience2 + Experience + isBlack + isSMSA, data = WR_data)
+anova(lm_Log_WR, lm_Log_noRegion_WR)
+```
+Conclusion:
+
+The F statistic is 47.099 and the p value is 2.2e-16. The p value is much smaller than 0.05, which indicate that we find obvious relationship between the Wage variable and the Region variable.
+
+So we choose the model with Region variable as our final model, and here is the final regression output:
+```{r final model, WR}
+summary(lm_Log_WR)
+exp(lm_Log_WR$coefficients)
+exp(confint(lm_Log_WR))
+```
+
+Interpretation:
+
+1.For the race variable, holding all other variables constant, wages of black employees tend to be 79.04% of that of nonblack employees, i.e. black people make 21.96% less money than nonblack people.
+
+2.For education variable, holding all other variables constant, each one unit increase of education level multiplies brain weight by  1.0926627, i.e. we expect the brain weight to decrease by about 9.27%.
+
+3.For region variable, we use NE region as the base case. Holding all other variables constant, the wage in MW region is 95.79% of that in the NE region, and the wage in S region is 90.08% of that in the NE region, and the wage in MW region is 94.71% of that in the NE region.
+
+4.We use plot to interpret the Experience variable.
+
+Holding all other variables constant and all at the base case, the plot below describes the relation between Wage and Experience:
+```{r Experience interpretation, WR}
+Exp_changes <- WR_data$Experience
+exp(coef(lm_Log_WR))
+avgWage <- exp(coef(lm_Log_WR))[3] * Exp_changes ^ 2 + exp(coef(lm_Log_WR))[2] * Exp_changes + exp(coef(lm_Log_WR))[1]
+plot(x = Exp_changes, y = avgWage, xlab = "Change in years of experience", ylab = "Change in wages")
+```
