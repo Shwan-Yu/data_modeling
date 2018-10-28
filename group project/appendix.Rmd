@@ -1,0 +1,106 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Question2
+
+First we read in the data, take a first look(in appendix) and then do the mean centering:
+```{r message=FALSE, warning=FALSE}
+library("pROC")
+library("arm")
+ldata <- read.table('lalondedata', header = TRUE, sep = ',')
+ldata$age.c = ldata$age - mean(ldata$age)
+ldata$educ.c = ldata$educ - mean(ldata$educ)
+```
+
+We started from making a dummy variable to show if salary is positive in 1978, and creating two dummy varible as predictor variable: employed_74 and employed_75
+```{r}
+ldata$positive_sal78 = rep(0, nrow(ldata))
+ldata$positive_sal78[ldata$re78 != 0] = 1
+ldata$employed_74 = rep(0, nrow(ldata))
+ldata$employed_75 = rep(0, nrow(ldata))
+ldata$employed_74[ldata$re74 != 0] = 1
+ldata$employed_75[ldata$re75 != 0] = 1
+```
+
+###Exploratory data analysis: 
+
+Now we are looking at binnedplots of continuous predictors versus zero:
+All things seem to be good except Age variable seems to have a quadratic trend.
+
+```{r binnedplots with variable}
+binnedplot(ldata$age.c, y=ldata$positive_sal78, xlab = "age", ylab = "positive salary")
+binnedplot(ldata$educ.c, y=ldata$positive_sal78, xlab = "education", ylab = "positive salary")
+binnedplot(ldata$re74, y=ldata$positive_sal78, xlab = "74 salary", ylab = "positive salary")
+binnedplot(ldata$re75, y=ldata$positive_sal78, xlab = "75 salary", ylab = "positive salary")
+```
+
+
+###Fit the first model
+
+After some Exploratory data analysis, we then try a logistic regression that has a main effect for every variable and linear predictors:
+```{r mean centering and modeling}
+q2reg1 = glm(positive_sal78 ~ age.c + educ.c + re74 + re75 + as.factor(employed_74) +
+               as.factor(employed_75) + as.factor(black) + as.factor(hispan) + 
+               as.factor(married) + as.factor(nodegree) + as.factor(treat), 
+               data = ldata, family = binomial)
+summary(q2reg1)
+```
+
+###Model diagnostics
+
+We first do binned residual plots for numeric variables:
+We don't find any noticeable patterns.
+```{r raw residuals}
+par(mfcol = c(2,2))
+rawresid1 = ldata$positive_sal78 - fitted(q2reg1)
+binnedplot(x=ldata$age.c, y = rawresid1, xlab = "Age centered", ylab = "Residuals",
+main = "Binned residuals versus age")
+
+binnedplot(x=ldata$educ.c, y = rawresid1, xlab = "Education centered", ylab = "Residuals",
+main = "Binned residuals versus education")
+
+binnedplot(x=ldata$re74, y = rawresid1, xlab = "salary in 74", ylab = "Residuals",
+main = "Binned residuals versus salary in 74")
+
+binnedplot(x=ldata$re75, y = rawresid1, xlab = "salary in 75", ylab = "Residuals",
+main = "Binned residuals salary in 75")
+```
+
+Then look at average residuals by dummy variables using the tapply command:
+```{r average residuals}
+tapply(rawresid1, ldata$black, mean)
+tapply(rawresid1, ldata$hispan, mean)
+tapply(rawresid1, ldata$married, mean)
+tapply(rawresid1, ldata$nodegree, mean)
+tapply(rawresid1, ldata$treat, mean)
+tapply(rawresid1, ldata$employed_74, mean)
+tapply(rawresid1, ldata$employed_75, mean)
+```
+
+Confusion matrix with .5 threshold and .6 threshold:
+```{r confusion matrix}
+threshold = 0.6
+table(ldata$positive_sal78, q2reg1$fitted > threshold)
+
+threshold = 0.5
+table(ldata$positive_sal78, q2reg1$fitted > threshold)
+```
+
+Then we look at ROC curve:
+We didn't find specific pattern from the model diagnostics, so we decide not to do transformations. We got area under the curve value: 0.6501.
+```{r ROC}
+roc(ldata$positive_sal78, fitted(q2reg1), plot=T, legacy.axes=T)
+```
+### Analytics for interaction I'm interested in:
+
+We're interested in education level and want to make sure whether the effect changes by demographic groups of different education level, so we remove Education variable and do the change in deviance test, and we get a p value of 0.3695, so education level might not be so important, but we will keep it in the model.
+```{r interact smoking and race, 2}
+q2reg3 = glm(positive_sal78 ~ age.c + re74 + re75 + as.factor(employed_74) 
+             + as.factor(employed_75) + as.factor(black) + as.factor(hispan) 
+             + as.factor(married) + as.factor(nodegree) + as.factor(treat), 
+             data = ldata, family = binomial)
+anova(q2reg1, q2reg3, test= "Chisq")
+```

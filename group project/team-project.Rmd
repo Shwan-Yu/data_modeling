@@ -1,0 +1,122 @@
+---
+title: "Team Project - Effects of Job Training on Wages"
+author: "Sicong Zhao, Xuan Yu"
+date: "10/18/2018"
+output: pdf_document
+---
+# Question2
+
+First we read in the data, take a first look(in appendix) and then do the mean centering:
+```{r message=FALSE, warning=FALSE}
+library("pROC")
+library("arm")
+ldata <- read.table('lalondedata', header = TRUE, sep = ',')
+ldata$age.c = ldata$age - mean(ldata$age)
+ldata$educ.c = ldata$educ - mean(ldata$educ)
+```
+
+We started from making a dummy variable to show if salary is positive in 1978, and creating two dummy varible as predictor variable: employed_74 and employed_75
+```{r}
+ldata$positive_sal78 = rep(0, nrow(ldata))
+ldata$positive_sal78[ldata$re78 != 0] = 1
+ldata$employed_74 = rep(0, nrow(ldata))
+ldata$employed_75 = rep(0, nrow(ldata))
+ldata$employed_74[ldata$re74 != 0] = 1
+ldata$employed_75[ldata$re75 != 0] = 1
+```
+
+After some Exploratory data analysis, we then try a logistic regression that has a main effect for every variable and linear predictors, we put the summary of the model and all diagnostics part in the appendix, and we got area under the curve value 0.6501:
+```{r mean centering and modeling}
+q2reg1 = glm(positive_sal78 ~ age.c + educ.c + re74 + re75 + as.factor(employed_74) +
+               as.factor(employed_75) + as.factor(black) + as.factor(hispan) + 
+               as.factor(married) + as.factor(nodegree) + as.factor(treat), 
+               data = ldata, family = binomial)
+```
+
+We then need to then check if the effects differ by demographic groups. We first look at the p value of the original model and find Age and Black variable may have a protential impact on the outcome. So we first try the model without Age and Black variable:
+```{r interact smoking and race}
+q2reg2 = glm(positive_sal78 ~ educ.c + re74 + re75 + as.factor(employed_74) + 
+               as.factor(employed_75) + as.factor(hispan) + as.factor(married) + 
+               as.factor(nodegree) + as.factor(treat), 
+               data = ldata, family = binomial)
+```
+
+We do the change in deviance test to see if the effects differ by these two variables. We get a p value of 0.0006713, so we find the effect differ by age and race black.
+```{r change in deviance test}
+anova(q2reg1, q2reg2, test= "Chisq")
+```
+
+We're interested in education level, so we build a model 3. We remove Education variable and do the change in deviance test, and put the analytics part in the appendix. We get a p value of 0.3695, so education level might not be so important, but we will keep it in the model.
+
+Then, scientifically, it is plausible to think that there might be interactions between age variable and nodegree and treat variable, because older people might focus less on their studying and might have a hard time learning new things even they received a job training, which leads to greater odds of having 0 income than younger people; And older people with no degree may be way more hard to find a job than younger people with no degree. So I might try the interaction between age variable and nodegree and treat variable:
+```{r interact smoking and height, warning=FALSE}
+q2reg4 = glm(positive_sal78 ~ age.c * (as.factor(nodegree) + as.factor(treat)) + educ.c + 
+               re74 + re75 + as.factor(employed_74) + as.factor(employed_75) + 
+               as.factor(black) + as.factor(hispan) + as.factor(married), 
+               data = ldata, family = binomial)
+```
+
+We do the change in deviance test to see if the interaction is useful. We get a p value of 0.002642, so we might find interaction between age variable and nodegree and treat variable.
+```{r change in deviance test, interesting}
+anova(q2reg1, q2reg4, test= "Chisq")
+```
+###Model diagnostics
+
+We first do binned residual plots for numeric variables:
+We don't find any noticeable patterns.
+```{r raw residuals}
+par(mfcol = c(2,2))
+rawresid4 = ldata$positive_sal78 - fitted(q2reg4)
+binnedplot(x=ldata$age.c, y = rawresid4, xlab = "Age centered", ylab = "Residuals",
+main = "Binned residuals versus age")
+
+binnedplot(x=ldata$educ.c, y = rawresid4, xlab = "Education centered", ylab = "Residuals",
+main = "Binned residuals versus education")
+
+binnedplot(x=ldata$re74, y = rawresid4, xlab = "salary in 74", ylab = "Residuals",
+main = "Binned residuals versus salary in 74")
+
+binnedplot(x=ldata$re75, y = rawresid4, xlab = "salary in 75", ylab = "Residuals",
+main = "Binned residuals salary in 75")
+```
+
+Then look at average residuals by dummy variables using the tapply command:
+```{r average residuals}
+tapply(rawresid4, ldata$black, mean);tapply(rawresid4, ldata$hispan, mean);tapply(rawresid4, ldata$married, mean);tapply(rawresid4, ldata$nodegree, mean);tapply(rawresid4, ldata$treat, mean);tapply(rawresid4, ldata$employed_74, mean);tapply(rawresid4, ldata$employed_75, mean)
+```
+
+We check the ROC curve of this new model:
+We got a lightly better area under the curve value: 0.6734.
+```{r ROC, final}
+par(mfcol = c(2,2))
+roc(ldata$positive_sal78, fitted(q2reg4), plot=T, legacy.axes=T)
+```
+### Choosing the model:
+
+Because the interactions we found is scientifically reasonable, and all residual plots seem fine; we also got a way better ROC curve with the model, we decide to choose model 4 as our final model. 
+
+Here is the summary of the final model:
+```{r final model, warning=FALSE}
+summary(q2reg4)
+```
+
+For the interpretation, we take exponential for the confidence intervals to get the odds:
+```{r exp, message=FALSE, warning=FALSE}
+exp(confint(q2reg4))
+```
+###Interpretation and Answers:
+
+Holding other variables constant, in the average age of workers, when shifting from not taking the job training to taking the training, the odds of workers having positive salary tend to be 164.96% higher than before, with a 95% confidence interval of (94.23, 291.86).
+
+Also, there is evidence that the effects differ by demographic groups of different ages and black people. We did change in deviance test and got a p value of 0.0006713. Worker of different ages or their race are black or not may lead to different odds of getting positive salary.
+
+I also found several interesting associations with the odds of getting positive salary:
+
+1, Whether workers' race are black or not really leads to a significant difference to the odds of them having positive salary in year 78: holding other variables constant, the odds of black workers having positive salary tend to be  59.81% of non-black workers, with a 95% confidence interval of (35.02%, 101.82%).
+
+2, Due to the p value, we found that workers' salary in year 74 and 75 might have some effect on whether they are getting positive salary or not. But the interesting part is, these two variable both have exponentiated coefficients of nearly 100%, which means that the difference of workers' salary in both year 74 and 75 not really changes the odds of them getting positive salary in year 78: e.g. holding other variables constant, when workers' salary in year 74 doubles, the odd of them having a positive salary in year 78 will be multiply by exp(4.355e-05 * log2) = 100.003%, which is very interesting.
+###Limitations:
+
+1, Treat variable has a large standard error and has a confidence interval which contains odds below 100%. So even we might find an impact of training for workers to get jobs in year 78 and it seems to be positive, we cannot say we are 95% percent sure it does have positive impact. We need larger data set to confirm that.
+
+2, Black and Hispanic are both race related variables, but Black seems to have effect on the result while Hispanic not. We need to ask some experts about the reason and make sure our conclusion is reasonable.
